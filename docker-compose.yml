@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp_postgres
+    environment:
+      POSTGRES_DB: erp_crm_db
+      POSTGRES_USER: erp_user
+      POSTGRES_PASSWORD: erp_pass_dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U erp_user -d erp_crm_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: erp_backend
+    environment:
+      DATABASE_URL: postgresql://erp_user:erp_pass_dev@postgres:5432/erp_crm_db
+      JWT_SECRET: docker_jwt_secret_change_in_production
+      JWT_EXPIRES_IN: 7d
+      PORT: 3001
+      NODE_ENV: production
+      FRONTEND_URL: http://localhost:5173
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm run db:push && npm run db:seed && npm start"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: erp_frontend
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+    ports:
+      - '80:80'
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
